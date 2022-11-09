@@ -1,0 +1,17 @@
+EXERCISE 2
+ 
+TASK: Research online for 10 more Linux commands aside from the ones already mentioned in this module. Submit using your AltSchool -cloud -exercises project, explaining what each command is used for with examples of how to use each and example screenshots of using each of them.
+ 
+INSTRUCTION: Submit your work in a folder for this exercise in your AltSchool -cloud-exercise project. You will need to learn how to embed images in a markdown file.
+ 
+SOLUTION
+1. $rmdir FILE: Helps/allows you to keep only empty directories.
+2. $locate -i FILE: Helps you to locate a file.
+3. $sudo: It enables you to perform tasks that required administrative / root permission.
+4. $du: It shows/reveals how much space a file or a directory takes.
+5. $grep: WORD FILE: Help to search through all the test in a given file.
+6. $diff: It compares the content of two file line by line and output the line that do not match.
+7. $chmod: It is used to change files and directories’ read, write, and execute permission.
+8. $chown: This enables you to change or transfer the ownership of a file to the user. E.g chown NEWOWNER FILE
+9. $jobs: Display all current jobs along with their statistics.
+10. $tar: It is used to achieve multiple files into a tarball. It is similar to Zip format with compression being an option. It is the most used command.
