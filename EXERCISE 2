@@ -9,9 +9,10 @@ SOLUTION
 2. $locate -i FILE: Helps you to locate a file.
 3. $sudo: It enables you to perform tasks that required administrative / root permission.
 4. $du: It shows/reveals how much space a file or a directory takes.
-5. $grep: WORD FILE: Help to search through all the test in a given file.
-6. $diff: It compares the content of two file line by line and output the line that do not match.
-7. $chmod: It is used to change files and directories’ read, write, and execute permission.
-8. $chown: This enables you to change or transfer the ownership of a file to the user. E.g chown NEWOWNER FILE
-9. $jobs: Display all current jobs along with their statistics.
-10. $tar: It is used to achieve multiple files into a tarball. It is similar to Zip format with compression being an option. It is the most used command.
+5. $pwd: It is used to find the path of your current working directory.
+6. $cd: It will take you to the home directory while cd [directory] will take you to the directory you specified
+7. $chmod [option] [permission] [file_name]: It is used to change files and directories’ read, write, and execute permission.
+ e.g $chmod 777 palette (this will change it to read, write, and execute the file)
+8. ls: it is used to lists files and directories within a system. 
+9. $chown: This enables you to change or transfer the ownership of a file to the user. E.g chown NEWOWNER FILE
+10. $ps: produces a snapshot of all running processes in your system e.g The unique process ID (PID), The type of the terminal (TTY), The running time (TIME) and The command that launches the process (CMD).
