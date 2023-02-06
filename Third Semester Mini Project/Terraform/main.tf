@@ -118,7 +118,7 @@ resource "aws_instance" "myweb-instance" {
   instance_type               = "t2.micro"
   associate_public_ip_address = true
   user_data                   = file("script.sh")
-  key_name                    = "myweb"
+  key_name                    = "TerraformKeys"
   vpc_security_group_ids      = [aws_security_group.myweb-instance-SG.id]
   subnet_id                   = element(aws_subnet.public_subnets[*].id, count.index)
 
@@ -181,10 +181,10 @@ resource "aws_lb_target_group" "myweb-instance_lb_TG" {
 
 resource "aws_lb_listener" "front_end" {
   load_balancer_arn = aws_lb.myweb-instance_lb.arn
-  port              = "80"
-  protocol          = "HTTP"
-  # ssl_policy        = "ELBSecurityPolicy-2016-08"
-  # certificate_arn   = "arn:aws:acm:us-east-1:625319181025:certificate/c864f8b5-2a8b-4b49-894c-8d19b7311f23"
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = "arn:aws:acm:us-east-1:625319181025:certificate/c864f8b5-2a8b-4b49-894c-8d19b7311f23"
 
   default_action {
     type             = "forward"
@@ -206,7 +206,7 @@ data "aws_route53_zone" "zone" {
 
 resource "aws_route53_record" "www" {
   zone_id = data.aws_route53_zone.zone.zone_id
-  name    = "terraform-test.Bleuche.online"
+  name    = "terraform-test.bleuche.online"
   type    = "A"
   allow_overwrite = true
 
@@ -217,6 +217,7 @@ resource "aws_route53_record" "www" {
   }
 }
 
+
 # inventory file 
 resource "local_file" "ip_output" {
   content  = <<EOT
@@ -226,7 +227,7 @@ resource "local_file" "ip_output" {
   ${aws_instance.myweb-instance.*.public_ip[2]}
   [all:vars]
   ansible_user=ubuntu
-  ansible_ssh_private_key_file=../ansible/myweb.pem
+  ansible_ssh_private_key_file=../ansible/TerraformKeys.pem
   ansible_ssh_common_args='-o StrictHostKeyChecking=no'
   EOT
   
@@ -238,4 +239,3 @@ resource "local_file" "ip_output" {
     command = "ansible-playbook -i ../ansible/host-inventory ../ansible/playbook.yml"
   }
 }
-   
