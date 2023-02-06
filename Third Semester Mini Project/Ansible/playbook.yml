@@ -1,0 +1,22 @@
+---
+- name: playbook for webserver
+  hosts: all
+  become: true
+  become_user: root
+  tasks:
+    - name: Update "apt" repository
+      apt:
+        update_cache: yes
+        autoclean: yes
+
+    - name: Script to configure apache
+      script: script.sh
+      args:    
+        chdir: /home/ubuntu
+   
+    - name: set timezone to Africa/Lagos
+      timezone:
+        name: Africa/Lagos
+
+    - name: Restart the apache web server
+      command: systemctl restart apache2
