@@ -1,272 +1,241 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.49.0"
+    }
+  }
+  required_version = ">= 1.1.0"
+}
+
+# Configure the AWS Provider
 provider "aws" {
-  region = "us-east-1"
-  access_key = var.access_key
-  secret_key = var.secret_key
+  region = var.region
 }
 
-# Create VPC
-resource "aws_vpc" "Terraform_vpc" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
+resource "aws_vpc" "main" {
+  cidr_block = var.cidr_block
+
+  tags = var.tags
+}
+
+resource "aws_subnet" "public_subnets" {
+  count                   = length(var.public_subnet_cidrs)
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = element(var.public_subnet_cidrs, count.index)
+  availability_zone       = element(var.azs, count.index)
+  map_public_ip_on_launch = "true"
+
   tags = {
-    Name = "Terraform_vpc"
+    Name = "myweb-subnet-public-${element(var.azs, count.index + 1)}"
   }
 }
 
-# Create Internet Gateway
+resource "aws_subnet" "private_subnets" {
+  count                   = length(var.private_subnet_cidrs)
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = element(var.private_subnet_cidrs, count.index)
+  availability_zone       = element(var.azs, count.index)
+  map_public_ip_on_launch = "false"
 
-resource "aws_internet_gateway" "Terraform_internet_gateway" {
-  vpc_id = aws_vpc.Terraform_vpc.id
   tags = {
-    Name = "Terraform_internet_gateway"
+    Name = "myweb-subnet-private-${element(var.azs, count.index + 1)}"
   }
 }
 
-# Create public Route Table
-resource "aws_route_table" "Terraform-route-table-public" {
-  vpc_id = aws_vpc.Terraform_vpc.id
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "myweb-IGW"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.Terraform_internet_gateway.id
+    gateway_id = aws_internet_gateway.gw.id
   }
+
   tags = {
-    Name = "Terraform-route-table-public"
+    Name = "myweb-rtb-public"
   }
 }
 
-# Associate public subnet 1 with public route table
-resource "aws_route_table_association" "Terraform-public-subnet1-association" {
-  subnet_id      = aws_subnet.Terraform-public-subnet1.id
-  route_table_id = aws_route_table.Terraform-route-table-public.id
+resource "aws_route_table_association" "associate_public" {
+  count          = length(var.public_subnet_cidrs)
+  subnet_id      = element(aws_subnet.public_subnets[*].id, count.index)
+  route_table_id = aws_route_table.public.id
 }
 
-# Associate public subnet 2 with public route table
-resource "aws_route_table_association" "Terraform-public-subnet2-association" {
-  subnet_id      = aws_subnet.Terraform-public-subnet2.id
-  route_table_id = aws_route_table.Terraform-route-table-public.id
-}
+resource "aws_security_group" "myweb-instance-SG" {
+  name        = "sever-SG"
+  description = "allow inbound/outbound traffic for the webservers"
+  vpc_id      = aws_vpc.main.id
 
-
-# Create Public Subnet-1
-resource "aws_subnet" "Terraform-public-subnet1" {
-  vpc_id                  = aws_vpc.Terraform_vpc.id
-  cidr_block              = "10.0.1.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = "us-east-1a"
-  tags = {
-    Name = "Terraform-public-subnet1"
-  }
-}
-# Create Public Subnet-2
-resource "aws_subnet" "Terraform-public-subnet2" {
-  vpc_id                  = aws_vpc.Terraform_vpc.id
-  cidr_block              = "10.0.2.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = "us-east-1b"
-  tags = {
-    Name = "Terraform-public-subnet2"
-  }
-}
-
-
-# Create a security group for the load balancer
-resource "aws_security_group" "Terraform-load_balancer_sg" {
-  name        = "Terraform-load-balancer-sg"
-  description = "Security group for the load balancer"
-  vpc_id      = aws_vpc.Terraform_vpc.id
-  
-   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
   ingress {
+    description = "allow inbound HTTPS/TLS traffic"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    
-  }
-  egress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# Create Security Group to allow port ssh, http and https
-resource "aws_security_group" "Terraform-security-grp-rule" {
-  name        = "allow_ssh_http_https"
-  description = "Allow SSH, HTTP and HTTPS inbound traffic for private instances"
-  vpc_id      = aws_vpc.Terraform_vpc.id
-
- ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    security_groups = [aws_security_group.Terraform-load_balancer_sg.id]
-  }
-
- ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    security_groups = [aws_security_group.Terraform-load_balancer_sg.id]
   }
 
   ingress {
-    description = "SSH"
+    description = "allow inbound HTTP traffic"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "allow inbound SSH traffic"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    
   }
+
   egress {
+    description = "allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-   
   }
+
   tags = {
-    Name = "Terraform-security-grp-rule"
+    Name = "myweb-instance_SG"
   }
 }
 
+resource "aws_instance" "myweb-instance" {
+  count                       = length(var.public_subnet_cidrs)
+  ami                         = var.ami
+  instance_type               = "t2.micro"
+  associate_public_ip_address = true
+  user_data                   = file("script.sh")
+  key_name                    = "myweb"
+  vpc_security_group_ids      = [aws_security_group.myweb-instance-SG.id]
+  subnet_id                   = element(aws_subnet.public_subnets[*].id, count.index)
 
-# creating First Instance
-resource "aws_instance" "Terraform1" {
-  ami             = "ami-00874d747dde814fa"
-  instance_type   = "t2.micro"
-  key_name        = "TerraformKeys"
-  security_groups = [aws_security_group.Terraform-security-grp-rule.id]
-  subnet_id       = aws_subnet.Terraform-public-subnet1.id
-  availability_zone = "us-east-1a"
+
   tags = {
-    Name   = "Terraform-1"
-    source = "Terraform"
+    Name = "myweb-instance-a${count.index + 1}"
   }
+
 }
-# creating Second Instance
- resource "aws_instance" "Terraform2" {
-  ami             = "ami-00874d747dde814fa"
-  instance_type   = "t2.micro"
-  key_name        = "TerraformKeys"
-  security_groups = [aws_security_group.Terraform-security-grp-rule.id]
-  subnet_id       = aws_subnet.Terraform-public-subnet2.id
-  availability_zone = "us-east-1b"
+
+resource "aws_security_group" "myweb-instance_lb_SG" {
+  name        = "myweb-instance-lb-sg"
+  description = "Allow inbound/oubound traffic for the load balancer"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "allow inbound HTTPS/TLS traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "allow inbound HTTP traffic"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags = {
-    Name   = "Terraform-2"
-    source = "Terraform"
+    Name = "lb-sg"
   }
 }
 
-# creating Third Instance
-resource "aws_instance" "Terraform3" {
-  ami             = "ami-00874d747dde814fa"
-  instance_type   = "t2.micro"
-  key_name        = "TerraformKeys"
-  security_groups = [aws_security_group.Terraform-security-grp-rule.id]
-  subnet_id       = aws_subnet.Terraform-public-subnet1.id
-  availability_zone = "us-east-1a"
-  tags = {
-    Name   = "Terraform-3"
-    source = "Terraform"
-  }
-}
-
-
-# Create a file to store the IP addresses of the instances
-resource "local_file" "Ip_address" {
-  filename = "/vagrant/terraform/host-inventory"
-  content  = <<EOT
-${aws_instance.Terraform1.public_ip}
-${aws_instance.Terraform2.public_ip}
-${aws_instance.Terraform3.public_ip}
-  EOT
-}
-
-
-# Create an Application Load Balancer
-resource "aws_lb" "Terraform-load-balancer" {
-  name               = "Terraform-load-balancer"
+resource "aws_lb" "myweb-instance_lb" {
+  name               = "myweb-instance-lb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.Terraform-load_balancer_sg.id]
-  subnets            = [aws_subnet.Terraform-public-subnet1.id, aws_subnet.Terraform-public-subnet2.id]
- #enable_cross_zone_load_balancing = true
-  enable_deletion_protection = false
-  depends_on                 = [aws_instance.Terraform1, aws_instance.Terraform2, aws_instance.Terraform3]
+  security_groups    = [aws_security_group.myweb-instance_lb_SG.id]
+  subnets            = aws_subnet.public_subnets[*].id
+
 }
 
-
-# Create target group
-resource "aws_lb_target_group" "Terraform-target-group" {
-  name     = "Terraform-target-group"
-  target_type = "instance"
+resource "aws_lb_target_group" "myweb-instance_lb_TG" {
+  name     = "myweb-instance-lb-TG"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = aws_vpc.Terraform_vpc.id
-  health_check {
-    path                = "/"
-    protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 15
-    timeout             = 3
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-  }
+  vpc_id   = aws_vpc.main.id
 }
 
-# Create the listener
-resource "aws_lb_listener" "Terraform-listener" {
-  load_balancer_arn = aws_lb.Terraform-load-balancer.arn
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.myweb-instance_lb.arn
   port              = "80"
   protocol          = "HTTP"
+  # ssl_policy        = "ELBSecurityPolicy-2016-08"
+  # certificate_arn   = "arn:aws:acm:us-east-1:625319181025:certificate/c864f8b5-2a8b-4b49-894c-8d19b7311f23"
+
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.Terraform-target-group.arn
-  }
-}
-# Create the AWS Lb listener rule
-resource "aws_lb_listener_rule" "Terraform-listener-rule" {
-  listener_arn = aws_lb_listener.Terraform-listener.arn
-  priority     = 1
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.Terraform-target-group.arn
-  }
-  condition {
-    path_pattern {
-      values = ["/"]
-    }
+    target_group_arn = aws_lb_target_group.myweb-instance_lb_TG.arn
   }
 }
 
-
-# Attach the target group to the load balancer
-resource "aws_lb_target_group_attachment" "Terraform-target-group-attachment1" {
-  target_group_arn = aws_lb_target_group.Terraform-target-group.arn
-  target_id        = aws_instance.Terraform1.id
+resource "aws_lb_target_group_attachment" "myweb-instance_lb_TG_ATT" {
+  count            = length(var.public_subnet_cidrs)
+  target_group_arn = aws_lb_target_group.myweb-instance_lb_TG.arn
+  target_id        = element(aws_instance.myweb-instance[*].id, count.index)
   port             = 80
 }
-resource "aws_lb_target_group_attachment" "Terraform-target-group-attachment2" {
-  target_group_arn = aws_lb_target_group.Terraform-target-group.arn
-  target_id        = aws_instance.Terraform2.id
-  port             = 80
-}
-resource "aws_lb_target_group_attachment" "Terraform-target-group-attachment3" {
-  target_group_arn = aws_lb_target_group.Terraform-target-group.arn
-  target_id        = aws_instance.Terraform3.id
-  port             = 80 
- 
+
+data "aws_route53_zone" "zone" {
+  zone_id      = var.zone_id
+  private_zone = false
 }
 
+resource "aws_route53_record" "www" {
+  zone_id = data.aws_route53_zone.zone.zone_id
+  name    = "terraform-test.Bleuche.online"
+  type    = "A"
+  allow_overwrite = true
+
+  alias {
+    name                   = aws_lb.myweb-instance_lb.dns_name
+    zone_id                = aws_lb.myweb-instance_lb.zone_id
+    evaluate_target_health = false
+  }
+}
+
+# inventory file 
+resource "local_file" "ip_output" {
+  content  = <<EOT
+  [all]
+  ${aws_instance.myweb-instance.*.public_ip[0]}
+  ${aws_instance.myweb-instance.*.public_ip[1]}
+  ${aws_instance.myweb-instance.*.public_ip[2]}
+  [all:vars]
+  ansible_user=ubuntu
+  ansible_ssh_private_key_file=../ansible/myweb.pem
+  ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+  EOT
+  
+  filename = "../ansible/host-inventory"
+  directory_permission = "777"
+  file_permission = "777"
+
+  provisioner "local-exec" {
+    command = "ansible-playbook -i ../ansible/host-inventory ../ansible/playbook.yml"
+  }
+}
    
